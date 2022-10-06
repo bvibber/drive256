@@ -1,0 +1,183 @@
+  This file contains the format for my Drive256 drivers. I recommend
+that you make your drivers in assembly language or C, or a combination.
+Basically, make a .COM-style file from the driver program and rename it
+with a .BGD extention (Brion's Graphics Driver).
+
+Drive256 driver format (assembly style):
+
+; Header
+db 'D256'             ; Identification for Drive256
+db bits               ; 8 for 256 color, 24 for 24-bit
+dw ScrWidth           ; Width of screen in pixels
+dw ScrHeight          ; Height of screen in pixels
+dw AspectMul          ; Aspect ratio of pixel = AspectMul / AspectDiv
+dw AspectDiv          ;
+
+; Vectors
+
+; Required
+dw EnterGraphics      ; Pointer to mode-set routine (see procedure
+                      ;  format below).
+dw LeaveGraphics      ; Pointer to proc to leave graphics mode
+dw ClearScreen        ; Pointer to screen clearing routine
+dw PutPixel           ; Pointer to pixel drawing routine
+dw GetPixel           ; Pointer to pixel getting routine
+dw SetPalette         ; Pointer to palette-setting routine. Leave blank
+                      ;  for 24-bit modes.
+; Optional (leave blank for emulation on procs, or no description)
+dw HorizLine          ; Pointer to horizontal line routine.
+dw CopyLineTo         ; Pointers to routines to copy a line to or from the
+dw CopyLineFrom       ;  screen.
+dw Description        ; Pointer to Pascal-style string, that describes the
+                      ;  driver mode.
+
+; Procedures and stuff
+;...
+
+  After the header and vectors, you put in your procedures, and a
+description of the driver mode (optional).
+
+  *****************************************
+  ** ALL PROCEDURES MUST BE FAR-CALLABLE **
+  *****************************************
+It is VITAL that the driver's public procedures are far-callable. Private
+procedures called by your own procs can be near, though.
+
+A far procedure in C:
+  void far far_proc(void)
+  {
+    ...
+  }
+In assembler:
+  far_proc proc far
+    ...
+  far_proc endp
+
+** Required **
+
+- EnterGraphics
+  The EnterGraphics procedure puts the computer into graphics mode and
+does any other required setup.
+  Input:
+    none
+  Output:
+    ax = 0 if okay, 1 if error
+
+- LeaveGraphics
+  Returns the computer to text mode and does any necessary
+cleanup operations.
+  Input:
+    none
+  Output:
+    ah = 0 if okay, 1 if error
+
+- ClearScreen
+  Clears the graphics screen.
+  Input:
+    none
+  Output:
+    ah = 0 if okay, 1 if error
+
+- PutPixel
+  Draws a pixel on the screen in the specified color.
+  Input:
+    cx = x coordinate
+    dx = y coordinate
+    if 256 color:
+      al = color
+    if 24-bit:
+      al = red
+      bh = green
+      bl = blue
+  Output:
+    ah = 0 if okay, 1 if error
+
+- GetPixel
+  Returns the color value at a specified position on the screen.
+  Input:
+    cx = x coordinate
+    dx = y coordinate
+  Output:
+    ah = 0 if okay, 1 if error
+    if 256 color:
+      al = color
+    if 24-bit:
+      al = red
+      bh = green
+      bl = blue
+
+- SetPalette
+  Sets one or more palette colors for a 256 color driver. A pointer to an
+array of 3-byte records (red, green, blue) with the color values is given.
+  Input:
+    cx = first color
+    dx = number of colors
+    bx = offset of array
+    es = segment of array
+  Output:
+    ah = 0 if okay, 1 if error
+
+
+** Optional **
+
+- HorizLine
+  Draws a horizontal line in the given color. The reason it is here is
+that on some systems, there are ways of drawing horizontal lines much
+faster than drawing a line with PutPixel.
+  Input:
+    cx = left x coordinate
+    dx = right x coordinate
+    si = y coordinate
+    if 256 color:
+      al = color
+    if 24-bit:
+      al = red
+      bh = green
+      bl = blue
+  Output:
+    ah = 0 if okay, 1 if error
+
+- CopyLineTo
+  Copies a line of pixels to the screen. Same reason for being here as
+HorizLine. A pointer to an array with the color values is given. For a
+256 color driver, the array is a straight array of bytes containing the
+colors. In 24-bit modes, the array is an array of records (red, green,
+blue).
+  Input:
+    cx = left x coordinate
+    dx = right x coordinate
+    si = y coordinate
+    bx = offset of array
+    es = segment of array
+  Output:
+    ah = 0 if okay, 1 if error
+
+- CopyLineFrom
+  Copies a line of pixels from the screen. Same reason for being here as
+HorizLine. A pointer to an array to contain the color values is given.
+For a 256 color driver, the array is a straight array of bytes containing
+the colors. In 24-bit modes, the array is an array of records (red, green,
+blue).
+  Input:
+    cx = left x coordinate
+    dx = right x coordinate
+    si = y coordinate
+    bx = offset of array
+    es = segment of array
+  Output:
+    ah = 0 if okay, 1 if error
+
+- Description
+  This is a Pascal-style string giving a description of the driver. A
+Pascal-style string starts with a byte with contains the length of the
+string, not including itself. For instance, for the string 'I like Pascal',
+the first byte would contain a 13 (hex C). To use a Pascal string in a
+driver written in C, you might have a line such as this:
+  char Pascal_String[] = "\13I like Pascal";
+In assembler, you might have this:
+  Pascal_String db 13,'I like Pascal'
+In Pascal, if your version of Pascal will make .COM files, you could have
+this:
+  const Pascal_String: String = 'I like Pascal';
+If you don't want a description in your driver, just put a zero in
+the vector.
